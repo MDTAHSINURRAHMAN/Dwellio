@@ -5,53 +5,21 @@ const jwt = require("jsonwebtoken");
 const PORT = process.env.PORT || 5000;
 const app = express();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
-const allowedOrigins = [
-  "http://localhost:5173",
-  "https://dwellio-22657.web.app",
-  "https://dwellio-22657.firebaseapp.com",
-];
-
+// Updated CORS configuration
 app.use(
   cors({
-    origin: function (origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
+    origin: [
+      "http://localhost:5173",
+      "https://dwellio-22657.web.app",
+      "https://dwellio-22657.firebaseapp.com",
+    ],
     credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
-
-// CORS configuration
-// app.use(
-//   cors({
-//     origin: function (origin, callback) {
-//       // Allow requests with no origin (like mobile apps or curl requests)
-//       if (!origin) return callback(null, true);
-
-//       if (allowedOrigins.indexOf(origin) !== -1) {
-//         callback(null, true);
-//       } else {
-//         callback(new Error("Not allowed by CORS"));
-//       }
-//     },
-//     credentials: true,
-//     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-//     allowedHeaders: [
-//       "Content-Type",
-//       "Authorization",
-//       "Origin",
-//       "X-Requested-With",
-//       "Accept",
-//     ],
-//   })
-// );
-
-// Enable preflight for all routes
-// app.options("*", cors());
 
 app.use(express.json());
 
@@ -452,63 +420,21 @@ async function run() {
         const updatedOffer = req.body;
         const query = { _id: new ObjectId(id) };
 
-        // If the offer is being accepted
-        if (updatedOffer.status === "accepted") {
-          // First get the offer to find the property details
-          const offer = await offerCollection.findOne(query);
-          if (!offer) {
-            return res.status(404).json({ error: "Offer not found" });
-          }
+        const result = await offerCollection.updateOne(query, {
+          $set: updatedOffer,
+        });
 
-          // Find and reject all other offers for the same property title
-          const rejectQuery = {
-            propertyTitle: updatedOffer.propertyTitle,
-            _id: { $ne: new ObjectId(id) },
-            status: "pending", // Only reject pending offers
-          };
-
-          // Use a transaction to ensure all updates happen together
-          const session = client.startSession();
-          try {
-            await session.withTransaction(async () => {
-              // Update the current offer to accepted
-              await offerCollection.updateOne(
-                query,
-                { $set: updatedOffer },
-                { session }
-              );
-
-              // Reject other pending offers
-              await offerCollection.updateMany(
-                rejectQuery,
-                {
-                  $set: { status: "rejected" },
-                },
-                { session }
-              );
-
-              // Update property status to unavailable
-              await propertyCollection.updateOne(
-                { title: updatedOffer.propertyTitle },
-                { $set: { status: "unavailable" } },
-                { session }
-              );
-            });
-
-            res.status(200).json({ success: true });
-          } finally {
-            await session.endSession();
-          }
-        } else {
-          // For other status updates, just update the single offer
-          const result = await offerCollection.updateOne(query, {
-            $set: updatedOffer,
-          });
-          res.status(200).json(result);
+        if (updatedOffer.status === "bought") {
+          // Update property status to sold
+          await propertyCollection.updateOne(
+            { title: updatedOffer.propertyTitle },
+            { $set: { status: "sold" } }
+          );
         }
+
+        res.send(result);
       } catch (error) {
-        console.error("Error updating offer:", error);
-        res.status(500).json({ error: "Failed to update offer" });
+        res.status(500).send({ error: error.message });
       }
     });
 
@@ -550,6 +476,26 @@ async function run() {
         res
           .status(500)
           .json({ error: "Failed to fetch advertised properties" });
+      }
+    });
+
+    // Add these routes
+    app.post("/create-payment-intent", async (req, res) => {
+      try {
+        const { price } = req.body;
+        const amount = parseInt(price * 100);
+
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: amount,
+          currency: "usd",
+          payment_method_types: ["card"],
+        });
+
+        res.send({
+          clientSecret: paymentIntent.client_secret,
+        });
+      } catch (error) {
+        res.status(500).send({ error: error.message });
       }
     });
 

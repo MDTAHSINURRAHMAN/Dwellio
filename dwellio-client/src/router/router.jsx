@@ -21,6 +21,7 @@ import ManageReview from "../pages/dashboard/admin/ManageReview";
 import MyReviews from "../pages/dashboard/user/MyReviews";
 import AdvertiseProperties from "../pages/dashboard/admin/AdvertiseProperties";
 import PrivateRoute from "./PrivateRoute";
+import Payment from "../pages/dashboard/user/Payment";
 
 export const router = createBrowserRouter([
   {
@@ -29,11 +30,19 @@ export const router = createBrowserRouter([
   },
   {
     path: "/all-properties",
-    element: <PrivateRoute><AllProperties /></PrivateRoute>,
+    element: (
+      <PrivateRoute>
+        <AllProperties />
+      </PrivateRoute>
+    ),
   },
   {
     path: "/property/:id",
-    element: <PrivateRoute><PropertyDetails /></PrivateRoute>,
+    element: (
+      <PrivateRoute>
+        <PropertyDetails />
+      </PrivateRoute>
+    ),
   },
   {
     path: "/login",
@@ -42,6 +51,10 @@ export const router = createBrowserRouter([
   {
     path: "/register",
     element: <Register />,
+  },
+  {
+    path: "payment/:id",
+    element: <Payment />,
   },
   {
     path: "/dashboard",
@@ -53,9 +66,7 @@ export const router = createBrowserRouter([
     children: [
       {
         path: "admin-profile",
-        element: (
-            <AdminProfile />
-        ),
+        element: <AdminProfile />,
       },
       {
         path: "manage-properties",
@@ -108,7 +119,7 @@ export const router = createBrowserRouter([
       {
         path: "manage-reviews",
         element: <ManageReview />,
-      },	
+      },
       {
         path: "advertise-properties",
         element: <AdvertiseProperties />,
